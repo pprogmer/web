@@ -33,6 +33,14 @@ export default function TaskCard({ task, onChange }) {
         Status: <b>{task.status}</b>
       </p>
 
+      {task.server_name && <p className="text-sm text-gray-500">Server: {task.server_name}</p>}
+
+      {task.status === 'queued' && (
+        <p className="text-sm text-orange-600">
+          All servers are busy. Position in queue: {task.queue_position}, about {task.eta} s
+        </p>
+      )}
+
       {task.status === 'running' && (
         <div className="mt-1">
           <p className="text-sm text-gray-500">

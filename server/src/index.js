@@ -7,8 +7,13 @@ import { startWorker } from './worker.js'
 const MAX_IMAGE_SIDE = 4096
 const MAX_ACTIVE_TASKS = 3
 const MAX_STORED_TASKS = 20
+const SERVER_NAME = process.env.SERVER_NAME || 'server'
 
 const app = express()
+app.use((req, res, next) => {
+  res.set('X-Server', SERVER_NAME)
+  next()
+})
 app.use(express.json())
 app.use(express.static('public'))
 
@@ -63,6 +68,7 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body
   const result = await db.query('select * from users where email = $1', [email])
+  console.log(result)
   const user = result.rows[0]
   if (!user || !checkPassword(password, user.password)) {
     return res.status(400).json({ error: 'Wrong email or password' })
@@ -76,15 +82,34 @@ app.post('/api/logout', auth, async (req, res) => {
   res.json({ ok: true })
 })
 
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, server: SERVER_NAME })
+})
+
 app.get('/api/me', auth, (req, res) => {
   res.json(req.user)
 })
 
 app.get('/api/tasks', auth, async (req, res) => {
   const result = await db.query(
-    'select id, file_name, status, stage, progress, error, created_at from tasks where user_id = $1 order by id desc',
+    `select id, file_name, status, stage, progress, error, server_name, created_at,
+       (select count(*)::int from tasks queue where queue.status = 'queued' and queue.id <= tasks.id) as queue_position
+     from tasks where user_id = $1 order by id desc`,
     [req.user.id],
   )
+
+  const servers = await db.query(`select count(*)::int as count from servers where last_seen > now() - interval '10 seconds'`)
+  const average = await db.query(`
+    select coalesce(avg(extract(epoch from finished_at - started_at)), 20)::float as seconds
+    from (select * from tasks where status = 'done' order by id desc limit 10) last_tasks
+  `)
+  const serverCount = Math.max(servers.rows[0].count, 1)
+
+  for (const task of result.rows) {
+    if (task.status === 'queued') {
+      task.eta = Math.ceil(Math.ceil(task.queue_position / serverCount) * average.rows[0].seconds)
+    }
+  }
   res.json(result.rows)
 })
 
@@ -168,6 +193,15 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message })
 })
 
+function sendHeartbeat() {
+  db.query(
+    `insert into servers (name) values ($1) on conflict (name) do update set last_seen = now()`,
+    [SERVER_NAME],
+  ).catch(() => {})
+}
+
 await createTables()
+sendHeartbeat()
+setInterval(sendHeartbeat, 2000)
 startWorker()
-app.listen(3000, () => console.log('Server started on port 3000'))
+app.listen(3000, () => console.log(SERVER_NAME + ' started on port 3000'))

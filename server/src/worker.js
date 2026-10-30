@@ -3,15 +3,22 @@ import { db, addLog } from './db.js'
 
 const MAX_TIME = 60 * 1000
 
+const SERVER_NAME = process.env.SERVER_NAME || 'server'
+
 export async function startWorker() {
-  await db.query(`update tasks set status = 'queued', stage = null, progress = 0 where status = 'running'`)
+  await db.query(
+    `update tasks set status = 'queued', stage = null, progress = 0, server_name = null
+     where status = 'running' and server_name = $1`,
+    [SERVER_NAME],
+  )
 
   while (true) {
-    const result = await db.query(`
-      update tasks set status = 'running', stage = 'Starting', progress = 5, started_at = now()
-      where id = (select id from tasks where status = 'queued' order by id limit 1)
-      returning id, input, input_type
-    `)
+    const result = await db.query(
+      `update tasks set status = 'running', stage = 'Starting', progress = 5, started_at = now(), server_name = $1
+       where id = (select id from tasks where status = 'queued' order by id limit 1 for update skip locked)
+       returning id, input, input_type`,
+      [SERVER_NAME],
+    )
 
     if (result.rows.length > 0) {
       await processTask(result.rows[0])
@@ -23,7 +30,7 @@ export async function startWorker() {
 
 function processTask(task) {
   return new Promise((resolve) => {
-    addLog(task.id, 'Processing started')
+    addLog(task.id, 'Processing started on ' + SERVER_NAME)
     const child = fork('src/remover.js', { serialization: 'advanced' })
     let lastStage = ''
 

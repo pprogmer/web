@@ -14,17 +14,39 @@ services:
       interval: 2s
       retries: 30
 
-  server:
+  server1:
     build:
       context: .
       dockerfile: server/Dockerfile
     environment:
       DATABASE_URL: postgres://app:app@db:5432/app
-    ports:
-      - 8080:3000
+      SERVER_NAME: server1
     depends_on:
       db:
         condition: service_healthy
+
+  server2:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/app
+      SERVER_NAME: server2
+    depends_on:
+      db:
+        condition: service_healthy
+
+  balancer:
+    build:
+      context: .
+      dockerfile: balancer/Dockerfile
+    environment:
+      SERVERS: http://server1:3000,http://server2:3000
+    ports:
+      - 8080:8080
+    depends_on:
+      - server1
+      - server2
 
 volumes:
   pgdata:

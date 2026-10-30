@@ -4,6 +4,8 @@ export const db = new pg.Pool({ connectionString: process.env.DATABASE_URL })
 
 export async function createTables() {
   await db.query(`
+    select pg_advisory_xact_lock(1);
+
     create table if not exists users (
       id serial primary key,
       email text unique not null,
@@ -37,6 +39,13 @@ export async function createTables() {
       task_id int not null references tasks(id) on delete cascade,
       message text not null,
       created_at timestamptz not null default now()
+    );
+
+    alter table tasks add column if not exists server_name text;
+
+    create table if not exists servers (
+      name text primary key,
+      last_seen timestamptz not null default now()
     );
   `)
 }
