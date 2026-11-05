@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import express from 'express'
 import sharp from 'sharp'
 import { db, createTables, addLog } from './db.js'
@@ -43,6 +44,11 @@ async function auth(req, res, next) {
   next()
 }
 
+function admin(req, res, next) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Only for admins' })
+  next()
+}
+
 async function startSession(res, userId) {
   const token = crypto.randomUUID()
   await db.query('insert into sessions (token, user_id) values ($1, $2)', [token, userId])
@@ -68,7 +74,6 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body
   const result = await db.query('select * from users where email = $1', [email])
-  console.log(result)
   const user = result.rows[0]
   if (!user || !checkPassword(password, user.password)) {
     return res.status(400).json({ error: 'Wrong email or password' })
@@ -188,19 +193,43 @@ app.delete('/api/tasks/:id', auth, async (req, res) => {
   res.json({ ok: true })
 })
 
+app.get('/api/admin', auth, admin, async (req, res) => {
+  const servers = await db.query(
+    `select name, cpu, memory, last_seen > now() - interval '10 seconds' as online from servers order by name`,
+  )
+  const tasks = await db.query(`
+    select tasks.id, tasks.file_name, tasks.status, tasks.error, tasks.server_name, users.email
+    from tasks join users on users.id = tasks.user_id
+    where tasks.status in ('queued', 'running', 'failed') order by tasks.id desc
+  `)
+  res.json({ servers: servers.rows, tasks: tasks.rows })
+})
+
 app.use((err, req, res, next) => {
   console.error(err)
   res.status(err.status || 500).json({ error: err.message })
 })
 
+let lastCpuTime = 0
+
 function sendHeartbeat() {
+  const cpuTime = Number(fs.readFileSync('/sys/fs/cgroup/cpu.stat', 'utf8').split(/\s/)[1])
+  const memory = Number(fs.readFileSync('/sys/fs/cgroup/memory.current', 'utf8'))
+  const cpu = lastCpuTime ? Math.round((cpuTime - lastCpuTime) / 20000) : 0
+  lastCpuTime = cpuTime
+
   db.query(
-    `insert into servers (name) values ($1) on conflict (name) do update set last_seen = now()`,
-    [SERVER_NAME],
+    `insert into servers (name, cpu, memory) values ($1, $2, $3)
+     on conflict (name) do update set last_seen = now(), cpu = $2, memory = $3`,
+    [SERVER_NAME, cpu, Math.round(memory / 1024 / 1024)],
   ).catch(() => {})
 }
 
 await createTables()
+await db.query(`insert into users (email, password, role) values ($1, $2, 'admin') on conflict do nothing`, [
+  process.env.ADMIN_EMAIL,
+  hashPassword(process.env.ADMIN_PASSWORD),
+])
 sendHeartbeat()
 setInterval(sendHeartbeat, 2000)
 startWorker()

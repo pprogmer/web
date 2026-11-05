@@ -7,6 +7,8 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
       POSTGRES_DB: app
+    ports:
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,6 +23,8 @@ services:
     environment:
       DATABASE_URL: postgres://app:app@db:5432/app
       SERVER_NAME: server1
+      ADMIN_EMAIL: admin@admin.com
+      ADMIN_PASSWORD: admin123
     depends_on:
       db:
         condition: service_healthy
@@ -32,6 +36,8 @@ services:
     environment:
       DATABASE_URL: postgres://app:app@db:5432/app
       SERVER_NAME: server2
+      ADMIN_EMAIL: admin@admin.com
+      ADMIN_PASSWORD: admin123
     depends_on:
       db:
         condition: service_healthy

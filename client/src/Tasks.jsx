@@ -47,10 +47,13 @@ export default function Tasks() {
   return (
     <div>
       <div className="bg-white rounded-xl shadow p-6">
-        <input type="file" multiple accept={ALLOWED_TYPES.join(',')} onChange={upload} />
-        <p className="text-sm text-gray-500 mt-2">
-          JPEG, PNG or WebP, up to 10 MB and 4096x4096 px. You can have 3 active and 20 stored tasks.
-        </p>
+        <label className="block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50">
+          <input type="file" multiple accept={ALLOWED_TYPES.join(',')} onChange={upload} className="hidden" />
+          <span className="inline-block bg-blue-600 text-white rounded-lg px-5 py-2 font-medium">Choose images</span>
+          <p className="text-sm text-gray-500 mt-3">
+            JPEG, PNG or WebP, up to 10 MB and 4096x4096 px. You can have 3 active and 20 stored tasks.
+          </p>
+        </label>
         {errors.map((error) => (
           <p key={error} className="text-red-600 text-sm mt-1">
             {error}

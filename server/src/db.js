@@ -47,6 +47,9 @@ export async function createTables() {
       name text primary key,
       last_seen timestamptz not null default now()
     );
+
+    alter table servers add column if not exists cpu int not null default 0;
+    alter table servers add column if not exists memory int not null default 0;
   `)
 }
 

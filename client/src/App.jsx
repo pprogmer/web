@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Login from './Login'
 import Tasks from './Tasks'
+import Admin from './Admin'
 
 export default function App() {
   const [user, setUser] = useState(undefined)
@@ -33,6 +34,7 @@ export default function App() {
           </button>
         </div>
       </div>
+      {user.role === 'admin' && <Admin />}
       <Tasks />
     </div>
   )
